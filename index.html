@@ -20,9 +20,12 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: #f0f0f0;
       color: #1a1a1a;
+      min-height: 100vh;
       display: flex;
+      align-items: center;
       justify-content: center;
       padding: 48px 20px;
+      visibility: hidden;
     }
 
     .app {
@@ -550,6 +553,10 @@
       updateUI();
       setStatus('');
     }
+
+    requestAnimationFrame(() => {
+      document.body.style.visibility = 'visible';
+    });
 
     init();
   </script>
