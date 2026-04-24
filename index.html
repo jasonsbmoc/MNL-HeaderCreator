@@ -91,7 +91,6 @@
     button:disabled { opacity: 0.45; cursor: default; }
 
     button.active {
-      background: #ebebeb;
       border-color: #999;
     }
 
@@ -281,42 +280,46 @@
 
     // ── Render ────────────────────────────────────────────────────────────────
     function renderToCanvas(canvas, width, height, radius) {
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, width, height);
-
-      ctx.save();
-
-      // Clip to rounded rect
-      ctx.beginPath();
-      ctx.roundRect(0, 0, width, height, radius);
-      ctx.clip();
+      // Draw layers onto an offscreen canvas first, then clip-composite onto
+      // the target. This avoids dark anti-aliasing artifacts at the clip boundary
+      // that appear when ctx.filter is used inside a clipping region.
+      const off = new OffscreenCanvas(width, height);
+      const offCtx = off.getContext('2d');
 
       // Background: grayscale, cover-fill, pan offset
       if (state.bgImage) {
         const scale = Math.max(width / state.bgImage.width, height / state.bgImage.height);
         const sw = state.bgImage.width  * scale;
         const sh = state.bgImage.height * scale;
-        // panX/panY stored in preview coords; scale up for other canvases
         const k = width / PREVIEW_W;
         const drawX = (width  - sw) / 2 + state.panX * k;
         const drawY = (height - sh) / 2 + state.panY * k;
 
-        ctx.filter = 'grayscale(100%)';
-        ctx.drawImage(state.bgImage, drawX, drawY, sw, sh);
-        ctx.filter = 'none';
+        offCtx.filter = 'grayscale(100%)';
+        offCtx.drawImage(state.bgImage, drawX, drawY, sw, sh);
+        offCtx.filter = 'none';
       }
 
       // Text overlay
       if (state.textImage) {
-        ctx.drawImage(state.textImage, 0, 0, width, height);
+        offCtx.drawImage(state.textImage, 0, 0, width, height);
       }
 
       // Grain (overlay blend mode)
       if (state.grainImage) {
-        ctx.globalCompositeOperation = 'overlay';
-        ctx.drawImage(state.grainImage, 0, 0, width, height);
+        offCtx.globalCompositeOperation = 'overlay';
+        offCtx.drawImage(state.grainImage, 0, 0, width, height);
+        offCtx.globalCompositeOperation = 'source-over';
       }
 
+      // Composite offscreen result onto target, clipped to rounded rect
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, width, height);
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(0, 0, width, height, radius);
+      ctx.clip();
+      ctx.drawImage(off, 0, 0);
       ctx.restore();
     }
 
