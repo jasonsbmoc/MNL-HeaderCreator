@@ -161,23 +161,15 @@
     <!-- Controls -->
     <div class="controls">
 
-      <!-- Background source -->
+      <!-- All controls in one row — height never changes -->
       <div class="control-row">
         <button id="btnUpload">Upload image</button>
         <button id="btnRandom" class="active">Random from bank</button>
         <input type="file" id="fileInput" accept="image/*" style="display:none">
-      </div>
-
-      <!-- Text + download -->
-      <div class="control-row">
         <button id="btnRandomText">Randomize text</button>
         <button id="btnDownload" class="primary">Download</button>
-      </div>
-
-      <!-- Mark as used (bank mode only) -->
-      <div class="control-row" id="markUsedRow" style="display:none">
-        <button id="btnMarkUsed" class="danger">Mark as used</button>
-        <span class="filename-label" id="currentFilename"></span>
+        <button id="btnMarkUsed" class="danger" style="visibility:hidden">Mark as used</button>
+        <span class="filename-label" id="currentFilename" style="visibility:hidden"></span>
       </div>
 
       <!-- Status -->
@@ -367,7 +359,8 @@
       const isBank = state.mode === 'bank';
       document.getElementById('btnUpload').classList.toggle('active', !isBank);
       document.getElementById('btnRandom').classList.toggle('active', isBank);
-      document.getElementById('markUsedRow').style.display = isBank ? '' : 'none';
+      document.getElementById('btnMarkUsed').style.visibility = isBank ? 'visible' : 'hidden';
+      document.getElementById('currentFilename').style.visibility = isBank ? 'visible' : 'hidden';
       document.getElementById('currentFilename').textContent = state.bgFilename || '';
     }
 
