@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MNL Header Creator</title>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 
   <!-- GitHub API credentials — PAT scoped to Contents read/write on this repo only -->
   <script>
@@ -51,18 +52,22 @@
 
     .controls {
       display: flex;
-      flex-direction: column;
-      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
     }
 
-    .control-row {
+    .controls-left {
       display: flex;
-      gap: 10px;
       align-items: center;
+      gap: 8px;
     }
 
     button {
-      padding: 9px 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
       font-size: 14px;
       font-weight: 500;
       line-height: 1;
@@ -73,6 +78,12 @@
       cursor: pointer;
       transition: background 0.12s, border-color 0.12s, color 0.12s;
       white-space: nowrap;
+    }
+
+    button svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
     }
 
     button:hover:not(:disabled) { background: #f0f0f0; }
@@ -161,21 +172,23 @@
     <!-- Controls -->
     <div class="controls">
 
-      <!-- All controls in one row — height never changes -->
-      <div class="control-row">
-        <button id="btnUpload">Upload image</button>
-        <button id="btnRandom" class="active">Random from bank</button>
+      <!-- Left-aligned controls — visibility:hidden preserves height -->
+      <div class="controls-left">
+        <button id="btnRandomText"><i data-lucide="shuffle"></i> Random title</button>
+        <button id="btnUpload"><i data-lucide="image-up"></i> Upload image</button>
+        <button id="btnRandom" class="active"><i data-lucide="dices"></i> Random image</button>
         <input type="file" id="fileInput" accept="image/*" style="display:none">
-        <button id="btnRandomText">Randomize text</button>
-        <button id="btnDownload" class="primary">Download</button>
-        <button id="btnMarkUsed" class="danger" style="visibility:hidden">Mark as used</button>
+        <button id="btnMarkUsed" class="danger" style="visibility:hidden"><i data-lucide="circle-x"></i> Mark as used</button>
         <span class="filename-label" id="currentFilename" style="visibility:hidden"></span>
       </div>
 
-      <!-- Status -->
-      <div class="status" id="status"></div>
+      <!-- Right-aligned -->
+      <button id="btnDownload" class="primary"><i data-lucide="download"></i> Download</button>
 
     </div>
+
+    <div class="status" id="status"></div>
+
   </div>
 
   <!-- Confirmation modal -->
@@ -546,6 +559,8 @@
       updateUI();
       setStatus('');
     }
+
+    lucide.createIcons();
 
     requestAnimationFrame(() => {
       document.body.style.visibility = 'visible';
