@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MNL Header Creator</title>
+
+  <!-- GitHub API credentials — PAT scoped to Contents read/write on this repo only -->
+  <script>
+    const GITHUB_TOKEN = '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';
+    const GITHUB_OWNER = 'jasonsbmoc';
+    const GITHUB_REPO = 'MNL-HeaderCreator';
+    const GITHUB_BRANCH = 'main';
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f0f0;
+      color: #1a1a1a;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 20px;
+    }
+
+    .app {
+      width: 1000px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    #previewCanvas {
+      width: 1000px;
+      height: 250px;
+      border-radius: 8px;
+      display: block;
+      background: #1a1a1a;
+      cursor: grab;
+      user-select: none;
+    }
+
+    #previewCanvas.dragging { cursor: grabbing; }
+
+    #exportCanvas { display: none; }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .control-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    button {
+      padding: 9px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: #fff;
+      color: #1a1a1a;
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+      white-space: nowrap;
+    }
+
+    button:hover:not(:disabled) { background: #f0f0f0; }
+    button:active:not(:disabled) { background: #e5e5e5; }
+    button:disabled { opacity: 0.45; cursor: default; }
+
+    button.active {
+      background: #1a1a1a;
+      color: #fff;
+      border-color: #1a1a1a;
+    }
+
+    button.primary {
+      background: #1a1a1a;
+      color: #fff;
+      border-color: #1a1a1a;
+    }
+    button.primary:hover:not(:disabled) { background: #333; border-color: #333; }
+
+    button.danger { color: #b91c1c; border-color: #fca5a5; }
+    button.danger:hover:not(:disabled) { background: #fef2f2; }
+
+    .filename-label {
+      font-size: 13px;
+      color: #888;
+      font-family: ui-monospace, monospace;
+    }
+
+    .status {
+      font-size: 13px;
+      color: #888;
+      min-height: 18px;
+    }
+    .status.error { color: #b91c1c; }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.visible { display: flex; }
+
+    .modal {
+      background: #fff;
+      border-radius: 10px;
+      padding: 28px 32px;
+      max-width: 420px;
+      width: 90%;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+    }
+
+    .modal h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .modal p {
+      font-size: 14px;
+      color: #555;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <!-- Preview -->
+    <canvas id="previewCanvas" width="1000" height="250"></canvas>
+
+    <!-- Export (hidden) -->
+    <canvas id="exportCanvas" width="2000" height="500"></canvas>
+
+    <!-- Controls -->
+    <div class="controls">
+
+      <!-- Background source -->
+      <div class="control-row">
+        <button id="btnUpload">Upload image</button>
+        <button id="btnRandom" class="active">Random from bank</button>
+        <input type="file" id="fileInput" accept="image/*" style="display:none">
+      </div>
+
+      <!-- Text + download -->
+      <div class="control-row">
+        <button id="btnRandomText">Randomize text</button>
+        <button id="btnDownload" class="primary">Download</button>
+      </div>
+
+      <!-- Mark as used (bank mode only) -->
+      <div class="control-row" id="markUsedRow" style="display:none">
+        <button id="btnMarkUsed" class="danger">Mark as used</button>
+        <span class="filename-label" id="currentFilename"></span>
+      </div>
+
+      <!-- Status -->
+      <div class="status" id="status"></div>
+
+    </div>
+  </div>
+
+  <!-- Confirmation modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <h3>Remove from bank?</h3>
+      <p id="modalMessage"></p>
+      <div class="modal-actions">
+        <button id="btnModalCancel">Cancel</button>
+        <button id="btnModalConfirm" class="danger">Remove permanently</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Canvas dimensions ─────────────────────────────────────────────────────
+    const PREVIEW_W = 1000, PREVIEW_H = 250, PREVIEW_RADIUS = 8;
+    const EXPORT_W  = 2000, EXPORT_H  = 500, EXPORT_RADIUS  = 16;
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    const state = {
+      mode: 'bank',           // 'bank' | 'upload'
+      bgImage: null,          // HTMLImageElement
+      bgFilename: null,
+      panX: 0, panY: 0,
+      isDragging: false,
+      dragStartMouseX: 0, dragStartMouseY: 0,
+      dragStartPanX: 0,   dragStartPanY: 0,
+      textImage: null,
+      grainImage: null,
+      usedFilenames: new Set(),
+      availableBank: [],      // filenames not yet used
+      availableText: [],
+    };
+
+    // ── GitHub API ────────────────────────────────────────────────────────────
+    function ghHeaders() {
+      return {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        Accept: 'application/vnd.github+json',
+      };
+    }
+
+    async function ghGet(path) {
+      const res = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}?ref=${GITHUB_BRANCH}`,
+        { headers: ghHeaders() }
+      );
+      if (!res.ok) throw new Error(`GitHub GET ${path} → ${res.status}`);
+      return res.json();
+    }
+
+    async function ghPut(path, content, sha, message) {
+      const res = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}`,
+        {
+          method: 'PUT',
+          headers: { ...ghHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message,
+            content: btoa(unescape(encodeURIComponent(content))), // UTF-8 safe base64
+            sha,
+            branch: GITHUB_BRANCH,
+          }),
+        }
+      );
+      if (!res.ok) throw new Error(`GitHub PUT ${path} → ${res.status}`);
+      return res.json();
+    }
+
+    // ── Utilities ─────────────────────────────────────────────────────────────
+    function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error(`Failed to load: ${src}`));
+        img.src = src;
+      });
+    }
+
+    function setStatus(msg, isError = false) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status' + (isError ? ' error' : '');
+    }
+
+    function pickRandom(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    // ── Render ────────────────────────────────────────────────────────────────
+    function renderToCanvas(canvas, width, height, radius) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, width, height);
+
+      ctx.save();
+
+      // Clip to rounded rect
+      ctx.beginPath();
+      ctx.roundRect(0, 0, width, height, radius);
+      ctx.clip();
+
+      // Background: grayscale, cover-fill, pan offset
+      if (state.bgImage) {
+        const scale = Math.max(width / state.bgImage.width, height / state.bgImage.height);
+        const sw = state.bgImage.width  * scale;
+        const sh = state.bgImage.height * scale;
+        // panX/panY stored in preview coords; scale up for other canvases
+        const k = width / PREVIEW_W;
+        const drawX = (width  - sw) / 2 + state.panX * k;
+        const drawY = (height - sh) / 2 + state.panY * k;
+
+        ctx.filter = 'grayscale(100%)';
+        ctx.drawImage(state.bgImage, drawX, drawY, sw, sh);
+        ctx.filter = 'none';
+      }
+
+      // Text overlay
+      if (state.textImage) {
+        ctx.drawImage(state.textImage, 0, 0, width, height);
+      }
+
+      // Grain (overlay blend mode)
+      if (state.grainImage) {
+        ctx.globalCompositeOperation = 'overlay';
+        ctx.drawImage(state.grainImage, 0, 0, width, height);
+      }
+
+      ctx.restore();
+    }
+
+    function render() {
+      renderToCanvas(
+        document.getElementById('previewCanvas'),
+        PREVIEW_W, PREVIEW_H, PREVIEW_RADIUS
+      );
+    }
+
+    // ── Pan / drag ────────────────────────────────────────────────────────────
+    function clampPan() {
+      if (!state.bgImage) return;
+      const scale = Math.max(PREVIEW_W / state.bgImage.width, PREVIEW_H / state.bgImage.height);
+      const sw = state.bgImage.width  * scale;
+      const sh = state.bgImage.height * scale;
+      const maxX = (sw - PREVIEW_W) / 2;
+      const maxY = (sh - PREVIEW_H) / 2;
+      state.panX = Math.max(-maxX, Math.min(maxX, state.panX));
+      state.panY = Math.max(-maxY, Math.min(maxY, state.panY));
+    }
+
+    const previewCanvas = document.getElementById('previewCanvas');
+
+    previewCanvas.addEventListener('mousedown', (e) => {
+      if (!state.bgImage) return;
+      state.isDragging = true;
+      state.dragStartMouseX = e.clientX;
+      state.dragStartMouseY = e.clientY;
+      state.dragStartPanX   = state.panX;
+      state.dragStartPanY   = state.panY;
+      previewCanvas.classList.add('dragging');
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!state.isDragging) return;
+      state.panX = state.dragStartPanX + (e.clientX - state.dragStartMouseX);
+      state.panY = state.dragStartPanY + (e.clientY - state.dragStartMouseY);
+      clampPan();
+      render();
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!state.isDragging) return;
+      state.isDragging = false;
+      previewCanvas.classList.remove('dragging');
+    });
+
+    // ── UI sync ───────────────────────────────────────────────────────────────
+    function updateUI() {
+      const isBank = state.mode === 'bank';
+      document.getElementById('btnUpload').classList.toggle('active', !isBank);
+      document.getElementById('btnRandom').classList.toggle('active', isBank);
+      document.getElementById('markUsedRow').style.display = isBank ? '' : 'none';
+      document.getElementById('currentFilename').textContent = state.bgFilename || '';
+    }
+
+    // ── Background loading ────────────────────────────────────────────────────
+    async function pickRandomBank() {
+      const available = state.availableBank.filter(f => !state.usedFilenames.has(f));
+      if (available.length === 0) {
+        setStatus('No unused images in bank.', true);
+        return;
+      }
+      const filename = pickRandom(available);
+      setStatus('Loading…');
+      try {
+        state.bgImage    = await loadImage(`images/bank/${filename}`);
+        state.bgFilename = filename;
+        state.panX = 0;
+        state.panY = 0;
+        render();
+        updateUI();
+        setStatus('');
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    }
+
+    // ── Text randomization ────────────────────────────────────────────────────
+    async function pickRandomText() {
+      if (state.availableText.length === 0) return;
+      const filename = pickRandom(state.availableText);
+      try {
+        state.textImage = await loadImage(`images/text/${filename}`);
+        render();
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    }
+
+    // ── Mark as used ──────────────────────────────────────────────────────────
+    let pendingMarkAsUsed = null;
+
+    document.getElementById('btnMarkUsed').addEventListener('click', () => {
+      if (!state.bgFilename) return;
+      pendingMarkAsUsed = state.bgFilename;
+      document.getElementById('modalMessage').textContent =
+        `Remove "${state.bgFilename}" from the image bank permanently?`;
+      document.getElementById('modalOverlay').classList.add('visible');
+    });
+
+    document.getElementById('btnModalCancel').addEventListener('click', () => {
+      document.getElementById('modalOverlay').classList.remove('visible');
+      pendingMarkAsUsed = null;
+    });
+
+    document.getElementById('btnModalConfirm').addEventListener('click', async () => {
+      document.getElementById('modalOverlay').classList.remove('visible');
+      const filename = pendingMarkAsUsed;
+      pendingMarkAsUsed = null;
+      if (!filename) return;
+
+      setStatus('Updating used.json…');
+      try {
+        // Always GET fresh SHA before PUT to avoid conflicts
+        const fileData = await ghGet('used.json');
+        const parsed   = JSON.parse(atob(fileData.content.replace(/\s/g, '')));
+        if (!parsed.used.includes(filename)) parsed.used.push(filename);
+
+        await ghPut(
+          'used.json',
+          JSON.stringify(parsed, null, 2),
+          fileData.sha,
+          `Mark ${filename} as used`
+        );
+
+        state.usedFilenames.add(filename);
+        state.bgImage    = null;
+        state.bgFilename = null;
+        render();
+        updateUI();
+        setStatus(`"${filename}" removed from bank.`);
+      } catch (err) {
+        setStatus(`Failed: ${err.message}`, true);
+      }
+    });
+
+    // ── Download ──────────────────────────────────────────────────────────────
+    document.getElementById('btnDownload').addEventListener('click', () => {
+      const exportCanvas = document.getElementById('exportCanvas');
+      renderToCanvas(exportCanvas, EXPORT_W, EXPORT_H, EXPORT_RADIUS);
+      exportCanvas.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a   = document.createElement('a');
+        a.href     = url;
+        a.download = 'mnl-header.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    });
+
+    // ── Mode buttons ──────────────────────────────────────────────────────────
+    document.getElementById('btnUpload').addEventListener('click', () => {
+      document.getElementById('fileInput').click();
+    });
+
+    document.getElementById('fileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      try {
+        state.bgImage    = await loadImage(url);
+        state.bgFilename = file.name;
+        state.mode       = 'upload';
+        state.panX = 0;
+        state.panY = 0;
+        render();
+        updateUI();
+        setStatus('');
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+      e.target.value = ''; // allow re-selecting same file
+    });
+
+    document.getElementById('btnRandom').addEventListener('click', () => {
+      state.mode = 'bank';
+      updateUI();
+      pickRandomBank();
+    });
+
+    document.getElementById('btnRandomText').addEventListener('click', pickRandomText);
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    async function init() {
+      setStatus('Loading…');
+
+      const results = await Promise.allSettled([
+        loadImage('images/grain.png'),
+        ghGet('used.json'),
+        ghGet('images/bank'),
+        ghGet('images/text'),
+      ]);
+
+      // Grain
+      if (results[0].status === 'fulfilled') {
+        state.grainImage = results[0].value;
+      } else {
+        console.warn('Grain texture not loaded:', results[0].reason);
+      }
+
+      // used.json
+      if (results[1].status === 'fulfilled') {
+        const fileData = results[1].value;
+        const parsed   = JSON.parse(atob(fileData.content.replace(/\s/g, '')));
+        state.usedFilenames = new Set(parsed.used || []);
+      } else {
+        console.warn('used.json not loaded:', results[1].reason);
+        setStatus('Warning: could not load used.json.', true);
+      }
+
+      // Bank image list
+      if (results[2].status === 'fulfilled') {
+        state.availableBank = results[2].value
+          .filter(f => f.type === 'file' && /\.(jpe?g|png|webp)$/i.test(f.name))
+          .map(f => f.name);
+      } else {
+        console.warn('Bank images not loaded:', results[2].reason);
+        setStatus('Warning: could not list bank images.', true);
+      }
+
+      // Text image list
+      if (results[3].status === 'fulfilled') {
+        state.availableText = results[3].value
+          .filter(f => f.type === 'file' && /\.png$/i.test(f.name))
+          .map(f => f.name);
+      } else {
+        console.warn('Text images not loaded:', results[3].reason);
+      }
+
+      // Pick initial images in parallel
+      await Promise.all([pickRandomBank(), pickRandomText()]);
+
+      updateUI();
+      setStatus('');
+    }
+
+    init();
+  </script>
+</body>
+</html>
