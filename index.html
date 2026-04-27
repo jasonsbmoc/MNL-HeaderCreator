@@ -109,6 +109,33 @@
       font-family: ui-monospace, monospace;
     }
 
+    .zoom-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      visibility: hidden;
+    }
+
+    .zoom-row.visible { visibility: visible; }
+
+    .zoom-label {
+      font-size: 13px;
+      color: #888;
+      white-space: nowrap;
+    }
+
+    #zoomSlider {
+      width: 200px;
+      accent-color: #1a1a1a;
+      cursor: pointer;
+    }
+
+    .zoom-value {
+      font-size: 13px;
+      color: #888;
+      width: 32px;
+    }
+
     .status {
       font-size: 13px;
       color: #888;
@@ -171,17 +198,26 @@
 
       <!-- Left-aligned controls — visibility:hidden preserves height -->
       <div class="controls-left">
-        <button id="btnRandomText"><i data-lucide="shuffle"></i> Random title</button>
-        <button id="btnUpload"><i data-lucide="image-up"></i> Upload image</button>
-        <button id="btnRandom" class="active"><i data-lucide="dices"></i> Random image</button>
+        <button id="btnRefresh" style="padding: 8px;" title="Randomize everything"><i data-lucide="refresh-ccw"></i></button>
+        <button id="btnRandomText" title="Pick a random title overlay"><i data-lucide="shuffle"></i> Random title</button>
+        <button id="btnUpload" title="Upload your own background image"><i data-lucide="image-up"></i> Upload image</button>
+        <button id="btnRandom" class="active" title="Pick a random image from the bank"><i data-lucide="dices"></i> Random image</button>
         <input type="file" id="fileInput" accept="image/*" style="display:none">
-        <button id="btnMarkUsed" class="danger" style="visibility:hidden"><i data-lucide="circle-x"></i> Mark as used</button>
+        <button id="btnMarkUsed" class="danger" style="visibility:hidden" title="Retire this image from the bank permanently"><i data-lucide="circle-x"></i> Mark as used</button>
         <span class="filename-label" id="currentFilename" style="visibility:hidden"></span>
       </div>
 
       <!-- Right-aligned -->
-      <button id="btnDownload" class="primary"><i data-lucide="download"></i> Download</button>
+      <button id="btnDownload" class="primary" title="Download as PNG"><i data-lucide="download"></i> Download</button>
 
+    </div>
+
+    <!-- Zoom row — upload mode only -->
+    <div class="zoom-row" id="zoomRow">
+      <span class="zoom-label">Zoom</span>
+      <input type="range" id="zoomSlider" min="100" max="300" value="100" step="1">
+      <span class="zoom-value" id="zoomValue">1×</span>
+      <button id="btnResetZoom">Reset</button>
     </div>
 
     <div class="status" id="status"></div>
@@ -211,6 +247,7 @@
       bgImage: null,          // HTMLImageElement
       bgFilename: null,
       panX: 0, panY: 0,
+      zoom: 1,                // upload mode only, 1–3
       isDragging: false,
       dragStartMouseX: 0, dragStartMouseY: 0,
       dragStartPanX: 0,   dragStartPanY: 0,
@@ -287,7 +324,7 @@
 
       // Background: grayscale, cover-fill, pan offset
       if (state.bgImage) {
-        const scale = Math.max(width / state.bgImage.width, height / state.bgImage.height);
+        const scale = Math.max(width / state.bgImage.width, height / state.bgImage.height) * state.zoom;
         const sw = state.bgImage.width  * scale;
         const sh = state.bgImage.height * scale;
         const k = width / PREVIEW_W;
@@ -332,7 +369,7 @@
     // ── Pan / drag ────────────────────────────────────────────────────────────
     function clampPan() {
       if (!state.bgImage) return;
-      const scale = Math.max(PREVIEW_W / state.bgImage.width, PREVIEW_H / state.bgImage.height);
+      const scale = Math.max(PREVIEW_W / state.bgImage.width, PREVIEW_H / state.bgImage.height) * state.zoom;
       const sw = state.bgImage.width  * scale;
       const sh = state.bgImage.height * scale;
       const maxX = (sw - PREVIEW_W) / 2;
@@ -376,6 +413,15 @@
       document.getElementById('btnMarkUsed').style.visibility = isBank ? 'visible' : 'hidden';
       document.getElementById('currentFilename').style.visibility = isBank ? 'visible' : 'hidden';
       document.getElementById('currentFilename').textContent = state.bgFilename || '';
+      document.getElementById('zoomRow').classList.toggle('visible', !isBank);
+    }
+
+    function resetZoom() {
+      state.zoom = 1;
+      state.panX = 0;
+      state.panY = 0;
+      document.getElementById('zoomSlider').value = 100;
+      document.getElementById('zoomValue').textContent = '1×';
     }
 
     // ── Background loading ────────────────────────────────────────────────────
@@ -386,7 +432,6 @@
         return;
       }
       const filename = pickRandom(available);
-      setStatus('Loading…');
       try {
         state.bgImage    = await loadImage(`images/bank/${filename}`);
         state.bgFilename = filename;
@@ -488,8 +533,7 @@
         state.bgImage    = await loadImage(url);
         state.bgFilename = file.name;
         state.mode       = 'upload';
-        state.panX = 0;
-        state.panY = 0;
+        resetZoom();
         render();
         updateUI();
         setStatus('');
@@ -507,9 +551,27 @@
 
     document.getElementById('btnRandomText').addEventListener('click', pickRandomText);
 
+    document.getElementById('btnRefresh').addEventListener('click', () => {
+      state.mode = 'bank';
+      resetZoom();
+      updateUI();
+      Promise.all([pickRandomBank(), pickRandomText()]);
+    });
+
+    document.getElementById('zoomSlider').addEventListener('input', (e) => {
+      state.zoom = e.target.value / 100;
+      document.getElementById('zoomValue').textContent = `${state.zoom.toFixed(1)}×`;
+      clampPan();
+      render();
+    });
+
+    document.getElementById('btnResetZoom').addEventListener('click', () => {
+      resetZoom();
+      render();
+    });
+
     // ── Init ──────────────────────────────────────────────────────────────────
     async function init() {
-      setStatus('Loading…');
 
       const results = await Promise.allSettled([
         loadImage('images/grain.png'),
