@@ -43,15 +43,17 @@
     }
 
     .app {
-      width: 1000px;
+      width: 100%;
+      max-width: 1000px;
       display: flex;
       flex-direction: column;
       gap: 20px;
     }
 
     #previewCanvas {
-      width: 1000px;
-      height: 250px;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 4 / 1;   /* matches the 1000×250 drawing buffer */
       border-radius: 8px;
       display: block;
       cursor: grab;
@@ -67,17 +69,22 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
+      /* When the row runs out of horizontal room, let the Download button
+         drop below the left-hand group instead of overflowing. */
+      flex-wrap: wrap;
     }
 
     .controls-left {
       display: flex;
       align-items: center;
       gap: 8px;
-      /* Allow this group to shrink instead of forcing .app wider than 1000px.
-         Without these, a long filename in #currentFilename would blow out the
-         row and push the Download button off-frame. */
+      /* Allow this group to shrink instead of forcing .app wider than its
+         max-width. Without these, a long filename in #currentFilename would
+         blow out the row and push the Download button off-frame. */
       min-width: 0;
       overflow: hidden;
+      /* Buttons wrap onto multiple lines on narrow viewports. */
+      flex-wrap: wrap;
     }
 
     button {
@@ -135,6 +142,7 @@
       display: flex;
       align-items: center;
       gap: 12px;
+      flex-wrap: wrap;
       visibility: hidden;
     }
 
@@ -148,6 +156,7 @@
 
     #zoomSlider {
       width: 200px;
+      max-width: 100%;
       accent-color: #1a1a1a;
       cursor: pointer;
     }
@@ -428,8 +437,11 @@
 
     document.addEventListener('mousemove', (e) => {
       if (!state.isDragging) return;
-      state.panX = state.dragStartPanX + (e.clientX - state.dragStartMouseX);
-      state.panY = state.dragStartPanY + (e.clientY - state.dragStartMouseY);
+      // The canvas may be displayed smaller than its 1000px buffer, so convert
+      // cursor movement (CSS px) into buffer px to keep panning 1:1 with the cursor.
+      const scaleFactor = PREVIEW_W / (previewCanvas.getBoundingClientRect().width || PREVIEW_W);
+      state.panX = state.dragStartPanX + (e.clientX - state.dragStartMouseX) * scaleFactor;
+      state.panY = state.dragStartPanY + (e.clientY - state.dragStartMouseY) * scaleFactor;
       clampPan();
       render();
     });
